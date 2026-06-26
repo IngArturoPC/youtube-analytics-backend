@@ -13,7 +13,11 @@ const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } }); // Limite 10M
 const sentiment = new Sentiment();
 
 // Configuración de Middlewares (Seguridad)
-app.use(cors());
+app.use(cors({
+  origin: 'https://sensational-druid-fcbe07.netlify.app', // Tu URL de Netlify sin la diagonal al final
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Inicialización del Cliente de Supabase
