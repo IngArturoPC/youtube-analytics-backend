@@ -32,15 +32,25 @@ const supabase = createClient(
   (process.env.SUPABASE_KEY || '').trim()
 ); */
 
-// Inicialización ultra-segura removiendo espacios y saltos de línea invisibles (\r, \n)
-const supabaseUrl = process.env.SUPABASE_URL ? process.env.SUPABASE_URL.replace(/[\r\n\s]/g, '') : null;
-const supabaseKey = process.env.SUPABASE_KEY ? process.env.SUPABASE_KEY.replace(/[\r\n\s]/g, '') : null;
+// Función extractora ultra-segura para variables de entorno rebeldes
+const extraerVariable = (val) => {
+  if (!val) return '';
+  if (typeof val === 'string') return val.trim();
+  if (typeof val === 'object') {
+    // Si Render metió el valor dentro de un sub-objeto (ej. { value: '...' } o similar)
+    return (val.value || val.SUPABASE_URL || val.SUPABASE_KEY || JSON.stringify(val)).trim();
+  }
+  return String(val).trim();
+};
 
-console.log("=== COMPROBACIÓN DE CONTROL ===");
-console.log("URL Limpia:", supabaseUrl); 
+const supabaseUrl = extraerVariable(process.env.SUPABASE_URL).replace(/[\r\n\s]/g, '');
+const supabaseKey = extraerVariable(process.env.SUPABASE_KEY).replace(/[\r\n\s]/g, '');
+
+console.log("=== CONTROL EXTRA-SEGURO ===");
+console.log("URL Procesada Final:", supabaseUrl);
 
 const supabase = createClient(
-  supabaseUrl || 'https://placeholder-evita-crash.supabase.co', 
+  supabaseUrl || 'https://placeholder-evita-crash.supabase.co',
   supabaseKey || 'placeholder'
 );
 
