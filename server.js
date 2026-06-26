@@ -144,76 +144,85 @@ app.post('/api/upload', upload.single('archivo_comentarios'), async (req, res) =
             .pipe(csv())
             .on('data', (data) => resultadosCsv.push(data))
             .on('end', async () => {
-                
-                // Procesamiento secuencial controlado para garantizar integridad
-                for (const fila of resultadosCsv) {
-                    const authorName = fila['Author Name'] || fila['author_name'];
-                    const commentText = fila['Comments Text'] || fila['comments_text'];
-                    const videoTime = fila['Video Time'] || fila['video_time'];
-                    const messageTime = fila['Message Time'] || fila['message_time'];
-                    const channelUrl = fila['Author Channel URL'] || fila['author_channel_url'];
-                    const idOriginal = fila['Id'] || fila['id'];
+                try {
+                    console.log(`💬 CSV leído en memoria. Procesando ${resultadosCsv.length} filas...`);
+                    
+                    // Procesamiento secuencial controlado
+                    for (const fila of resultadosCsv) {
+                        const authorName = fila['Author Name'] || fila['author_name'];
+                        const commentText = fila['Comments Text'] || fila['comments_text'];
+                        const videoTime = fila['Video Time'] || fila['video_time'];
+                        const messageTime = fila['Message Time'] || fila['message_time'];
+                        const channelUrl = fila['Author Channel URL'] || fila['author_channel_url'];
+                        const idOriginal = fila['Id'] || fila['id'];
 
-                    if (!authorName) continue; // Saltar filas corruptas
+                        if (!authorName) continue;
 
-                    // A. Intercambio de Emoticones de Texto a Gráfico si aplica
-                    const textoProcesadoEmojis = emoji.emojify(commentText || "");
+                        const textoProcesadoEmojis = emoji.emojify(commentText || "");
+                        const analitica = clasificarYSentimiento(textoProcesadoEmojis);
 
-                    // B. Clasificación y Sentimiento Automático
-                    const analitica = clasificarYSentimiento(textoProcesadoEmojis);
-
-                    // C. LÓGICA UPSERT DE USUARIO EXTERNO
-                    const { data: usuarioExistente } = await supabase
-                        .from('catalogo_usuarios_youtube')
-                        .select('usuario_llave')
-                        .eq('usuario_llave', authorName)
-                        .maybeSingle();
-
-                    if (!usuarioExistente) {
-                        await supabase
+                        // LÓGICA UPSERT DE USUARIO EXTERNO
+                        const { data: usuarioExistente } = await supabase
                             .from('catalogo_usuarios_youtube')
+                            .select('usuario_llave')
+                            .eq('usuario_llave', authorName)
+                            .maybeSingle();
+
+                        if (!usuarioExistente) {
+                            await supabase
+                                .from('catalogo_usuarios_youtube')
+                                .insert([{
+                                    usuario_youtube_display: authorName,
+                                    usuario_llave: authorName,
+                                    url_canal: channelUrl || null,
+                                    es_externo: true,
+                                    pendiente_actualizacion: true
+                                }]);
+                        }
+
+                        // INSERCIÓN DEL COMENTARIO
+                        const { data: comentarioInsertado, error: errComment } = await supabase
+                            .from('youtube_comments')
                             .insert([{
-                                usuario_youtube_display: authorName,
-                                usuario_llave: authorName,
-                                url_canal: channelUrl || null,
-                                es_externo: true,
-                                pendiente_actualizacion: true
-                            }]);
+                                file_sequence_number: consecutivoActual,
+                                youtube_id: idOriginal || null,
+                                author_name: authorName,
+                                comments_text: textoProcesadoEmojis,
+                                video_time: videoTime || null,
+                                message_time: messageTime ? new Date(messageTime) : new Date(),
+                                author_channel_url: channelUrl || null,
+                                is_live_comment: esEnVivo,
+                                tipo_comentario: analitica.tipo,
+                                sentimiento: analitica.sentimiento
+                            }])
+                            .select('internal_id')
+                            .single();
+
+                        if (errComment) {
+                            console.error("❌ Error insertando comentario en Supabase:", errComment);
+                        }
+
+                        // INSERCIÓN DE HASHTAGS
+                        if (comentarioInsertado && analitica.hashtagsLimpios.length > 0) {
+                            const insertsHashtags = analitica.hashtagsLimpios.map(tag => ({
+                                comment_id: comentarioInsertado.internal_id,
+                                hashtag: tag
+                            }));
+                            await supabase.from('comment_hashtags').insert(insertsHashtags);
+                        }
                     }
 
-                    // D. INSERCIÓN DEL COMENTARIO
-                    const { data: comentarioInsertado, error: errComment } = await supabase
-                        .from('youtube_comments')
-                        .insert([{
-                            file_sequence_number: consecutivoActual,
-                            youtube_id: idOriginal || null,
-                            author_name: authorName,
-                            comments_text: textoProcesadoEmojis,
-                            video_time: videoTime || null,
-                            message_time: messageTime ? new Date(messageTime) : new Date(),
-                            author_channel_url: channelUrl || null,
-                            is_live_comment: esEnVivo,
-                            tipo_comentario: analitica.tipo,
-                            sentimiento: analitica.sentimiento
-                        }])
-                        .select('internal_id')
-                        .single();
+                    console.log("✅ ¡Procesamiento completado con éxito!");
+                    return res.json({ 
+                        mensaje: "Archivo procesado e ingresado exitosamente.", 
+                        consecutivo_asignado: consecutivoActual,
+                        total_registros: resultadosCsv.length
+                    });
 
-                    // E. INSERCIÓN DE HASHTAGS (Si existen)
-                    if (comentarioInsertado && analitica.hashtagsLimpios.length > 0) {
-                        const insertsHashtags = analitica.hashtagsLimpios.map(tag => ({
-                            comment_id: comentarioInsertado.internal_id,
-                            hashtag: tag
-                        }));
-                        await supabase.from('comment_hashtags').insert(insertsHashtags);
-                    }
+                } catch (errInterno) {
+                    console.error("❌ ERROR CRÍTICO DENTRO DEL BUCLE CSV:", errInterno);
+                    return res.status(500).json({ error: "Falla interna al procesar las filas del CSV.", detalle: errInterno.message });
                 }
-
-                return res.json({ 
-                    mensaje: "Archivo procesado e ingresado exitosamente.", 
-                    consecutivo_asignado: consecutivoActual,
-                    total_registros: resultadosCsv.length
-                });
             });
 
     } catch (error) {
