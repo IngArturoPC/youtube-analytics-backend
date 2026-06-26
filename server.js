@@ -116,7 +116,9 @@ app.get('/api/info', (req, res) => {
 });
 
 // Endpoint Crítico: Ingesta de CSV de Comentarios (Solo Admin de forma lógica)
-app.post('/api/comments/upload-csv', upload.single('archivo_comentarios'), async (req, res) => {
+// app.post('/api/comments/upload-csv', upload.single('archivo_comentarios'), async (req, res) => {
+    // Cambiar '/api/comments/upload-csv' por '/api/upload'
+app.post('/api/upload', upload.single('archivo_comentarios'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "No se subió ningún archivo CSV." });
         
