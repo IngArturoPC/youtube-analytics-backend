@@ -32,21 +32,17 @@ const supabase = createClient(
   (process.env.SUPABASE_KEY || '').trim()
 ); */
 
-// Diagnóstico de variables de entorno en producción
-console.log("=== COMPROBACIÓN DE CREDENCIALES ===");
-console.log("¿Existe URL en el entorno?:", process.env.SUPABASE_URL ? "SÍ" : "NO");
-console.log("¿Existe KEY en el entorno?:", process.env.SUPABASE_KEY ? "SÍ" : "NO");
+// Inicialización ultra-segura removiendo espacios y saltos de línea invisibles (\r, \n)
+const supabaseUrl = process.env.SUPABASE_URL ? process.env.SUPABASE_URL.replace(/[\r\n\s]/g, '') : null;
+const supabaseKey = process.env.SUPABASE_KEY ? process.env.SUPABASE_KEY.replace(/[\r\n\s]/g, '') : null;
 
-// Inicialización ultra-segura
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
+console.log("=== COMPROBACIÓN DE CONTROL ===");
+console.log("URL Limpia:", supabaseUrl); 
 
-if (!supabaseUrl || !supabaseKey) {
-  console.error("❌ ERROR CRÍTICO: Las variables de Supabase no están llegando a Node.js.");
-}
-
-const supabase = createClient(supabaseUrl || 'https://placeholder-evita-crash.supabase.co', supabaseKey || 'placeholder');
-
+const supabase = createClient(
+  supabaseUrl || 'https://placeholder-evita-crash.supabase.co', 
+  supabaseKey || 'placeholder'
+);
 
 // DICCIONARIO PARA REGLA DE "SOLO SALUDOS"
 const DICCIONARIO_SALUDOS = [
