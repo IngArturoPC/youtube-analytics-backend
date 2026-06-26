@@ -21,7 +21,7 @@ app.use(cors({
 app.use(express.json());
 
 
-console.log("Revisando variables en Render:", {
+/* console.log("Revisando variables en Render:", {
   hasUrl: !!process.env.SUPABASE_URL,
   hasKey: !!process.env.SUPABASE_KEY
 });
@@ -30,7 +30,23 @@ console.log("Revisando variables en Render:", {
 const supabase = createClient(
   (process.env.SUPABASE_URL || '').trim(), 
   (process.env.SUPABASE_KEY || '').trim()
-);
+); */
+
+// Diagnóstico de variables de entorno en producción
+console.log("=== COMPROBACIÓN DE CREDENCIALES ===");
+console.log("¿Existe URL en el entorno?:", process.env.SUPABASE_URL ? "SÍ" : "NO");
+console.log("¿Existe KEY en el entorno?:", process.env.SUPABASE_KEY ? "SÍ" : "NO");
+
+// Inicialización ultra-segura
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error("❌ ERROR CRÍTICO: Las variables de Supabase no están llegando a Node.js.");
+}
+
+const supabase = createClient(supabaseUrl || 'https://placeholder-evita-crash.supabase.co', supabaseKey || 'placeholder');
+
 
 // DICCIONARIO PARA REGLA DE "SOLO SALUDOS"
 const DICCIONARIO_SALUDOS = [
