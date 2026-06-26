@@ -20,8 +20,11 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Inicialización del Cliente de Supabase
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+// Inicialización del Cliente de Supabase (Limpiando espacios invisibles con .trim())
+const supabase = createClient(
+  (process.env.SUPABASE_URL || '').trim(), 
+  (process.env.SUPABASE_KEY || '').trim()
+);
 
 // DICCIONARIO PARA REGLA DE "SOLO SALUDOS"
 const DICCIONARIO_SALUDOS = [
