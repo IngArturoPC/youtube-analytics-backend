@@ -20,6 +20,12 @@ app.use(cors({
 }));
 app.use(express.json());
 
+
+console.log("Revisando variables en Render:", {
+  hasUrl: !!process.env.SUPABASE_URL,
+  hasKey: !!process.env.SUPABASE_KEY
+});
+
 // Inicialización del Cliente de Supabase (Limpiando espacios invisibles con .trim())
 const supabase = createClient(
   (process.env.SUPABASE_URL || '').trim(), 
