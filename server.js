@@ -32,27 +32,15 @@ const supabase = createClient(
   (process.env.SUPABASE_KEY || '').trim()
 ); */
 
-// Función extractora ultra-segura para variables de entorno rebeldes
-const extraerVariable = (val) => {
-  if (!val) return '';
-  if (typeof val === 'string') return val.trim();
-  if (typeof val === 'object') {
-    // Si Render metió el valor dentro de un sub-objeto (ej. { value: '...' } o similar)
-    return (val.value || val.SUPABASE_URL || val.SUPABASE_KEY || JSON.stringify(val)).trim();
-  }
-  return String(val).trim();
-};
+// ====== CONFIGURACIÓN DIRECTA Y SEGURA ======
+// Reemplaza los textos de abajo por tus credenciales reales de Supabase
+const supabaseUrl = 'https://zhtclrjpowktkcnccmwx.supabase.co/rest/v1/'; 
+const supabaseKey = 'sb_publishable_DowdOFlmdEUVv5FgeiT7EQ_fO170UiQ';
 
-const supabaseUrl = extraerVariable(process.env.SUPABASE_URL).replace(/[\r\n\s]/g, '');
-const supabaseKey = extraerVariable(process.env.SUPABASE_KEY).replace(/[\r\n\s]/g, '');
+console.log("=== CONTROL DE CONEXIÓN DIRECTA ===");
+console.log("URL Configurada:", supabaseUrl ? "Asignada Correctamente" : "Vacía");
 
-console.log("=== CONTROL EXTRA-SEGURO ===");
-console.log("URL Procesada Final:", supabaseUrl);
-
-const supabase = createClient(
-  supabaseUrl || 'https://placeholder-evita-crash.supabase.co',
-  supabaseKey || 'placeholder'
-);
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // DICCIONARIO PARA REGLA DE "SOLO SALUDOS"
 const DICCIONARIO_SALUDOS = [
