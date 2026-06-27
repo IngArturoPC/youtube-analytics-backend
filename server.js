@@ -14,7 +14,9 @@ const sentiment = new Sentiment();
 
 // Configuración de Middlewares (Seguridad)
 app.use(cors({
-  origin: 'https://sensational-druid-fcbe07.netlify.app', // Tu URL de Netlify sin la diagonal al final
+  origin: 
+    'https://sensational-druid-fcbe07.netlify.app', // Tu URL de Netlify sin la diagonal al final
+    'https://sensational-druid-fcbe07.netlify.app/' // Tu URL de Netlify con la diagonal al final
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
