@@ -15,7 +15,7 @@ const sentiment = new Sentiment();
 // Configuración de Middlewares (Seguridad)
 app.use(cors({
   origin: 
-    'https://sensational-druid-fcbe07.netlify.app', // Tu URL de Netlify sin la diagonal al final
+    'https://sensational-druid-fcbe07.netlify.app' // Tu URL de Netlify sin la diagonal al final
     'https://sensational-druid-fcbe07.netlify.app/' // Tu URL de Netlify con la diagonal al final
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -119,19 +119,17 @@ app.get('/api/info', (req, res) => {
 
 // Endpoint Crítico: Ingesta de CSV de Comentarios (Solo Admin de forma lógica)
 // app.post('/api/comments/upload-csv', upload.single('archivo_comentarios'), async (req, res) => {
-    // Cambiar '/api/comments/upload-csv' por '/api/upload'
+// Cambiar '/api/comments/upload-csv' por '/api/upload'
 // Cambiamos upload.single por upload.any() para que acepte cualquier nombre de campo que mande Netlify
+
+// Cambiamos la ruta a '/api/upload' para que coincida perfectamente con Netlify
 app.post('/api/upload', upload.any(), async (req, res) => {
     try {
-        // Al usar upload.any(), los archivos llegan en un arreglo req.files
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({ error: "No se subió ningún archivo CSV." });
         }
         
-        // Tomamos el primer archivo que venga en el formulario
         const archivoSubido = req.files[0];
-
-        // Determinar si el usuario indicó si es en vivo o estático desde el frontend
         const esEnVivo = req.body.is_live_comment === 'true';
 
         // 1. Obtener el número consecutivo correlativo del archivo
@@ -144,7 +142,7 @@ app.post('/api/upload', upload.any(), async (req, res) => {
 
         const consecutivoActual = ultimoComentario ? ultimoComentario.file_sequence_number + 1 : 1;
 
-        // PARSEO DEL ARCHIVO CSV DESDE MEMORIA BUFFER (Usando archivoSubido)
+        // PARSEO DEL ARCHIVO CSV DESDE MEMORIA BUFFER
         const resultadosCsv = [];
         const bufferStream = new stream.PassThrough();
         bufferStream.end(archivoSubido.buffer);
