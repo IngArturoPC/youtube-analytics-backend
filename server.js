@@ -12,20 +12,20 @@ const app = express();
 const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } }); // Limite 10MB para pruebas
 const sentiment = new Sentiment();
 
-// Configuración de Middlewares (Seguridad)
+// 1. Configuración de Middlewares (Seguridad CORS Corregida con Arreglo y Comas)
 app.use(cors({
-  origin: 
-    'https://sensational-druid-fcbe07.netlify.app' // Tu URL de Netlify sin la diagonal al final
-    'https://sensational-druid-fcbe07.netlify.app/' // Tu URL de Netlify con la diagonal al final
+  origin: [
+    'https://sensational-druid-fcbe07.netlify.app',
+    'https://sensational-druid-fcbe07.netlify.app/'
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
 
-// ====== CONFIGURACIÓN DIRECTA Y SEGURA ======
-// Reemplaza los textos de abajo por tus credenciales reales de Supabase
-const supabaseUrl = 'https://zhtclrjpowktkcnccmwx.supabase.co/rest/v1/'; 
+// 2. CONFIGURACIÓN DIRECTA Y SEGURA DE SUPABASE (URL Sanitizada sin sub-rutas)
+const supabaseUrl = 'https://zhtclrjpowktkcnccmwx.supabase.co'; 
 const supabaseKey = 'sb_publishable_DowdOFlmdEUVv5FgeiT7EQ_fO170UiQ';
 
 console.log("=== CONTROL DE CONEXIÓN DIRECTA ===");
@@ -33,35 +33,29 @@ console.log("URL Configurada:", supabaseUrl ? "Asignada Correctamente" : "Vacía
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// DICCIONARIO PARA REGLA DE "SOLO SALUDOS"
-const DICCIONARIO_SALUDOS = [
-    'presente', 'aqui estoy', 'aquí estoy', 'hola', 'saludos', 
-    'buenos dias', 'buenos días', 'buenas tardes', 'buenas noches', 
-    'listo', 'lista', 'unidos', 'apoyo'
-];
 
-// =====================================================================
-// FUNCIONES AUXILIARES DE PROCESAMIENTO (MÓDULO ETL & ANALYTICS)
-// =====================================================================
+// 3. DICCIONARIO DE SALUDOS REQUERIDO POR TU LOGICA
+const DICCIONARIO_SALUDOS = ['hola', 'buenos dias', 'saludos', 'buenas tardes', 'buenas noches', 'buen dia'];
 
+
+// 4. TU FUNCIÓN ORIGINAL DE ANALÍTICA (Declarada antes del endpoint para evitar Scope errors)
 function clasificarYSentimiento(textoOriginal) {
     const textoLimpio = textoOriginal ? textoOriginal.trim() : "";
     if (textoLimpio === "") {
-        return { tipo: 'Solo Comentarios', sentimiento: 'Neutral' };
+        return { tipo: 'Solo Comentarios', sentimiento: 'Neutral', hashtagsLimpios: [] };
     }
 
-    // 1. Manejo de Hashtags y Emojis
+    // Manejo de Hashtags y Emojis
     const hashtags = textoLimpio.match(/#\w+/g) || [];
     const textoSinEmojis = emoji.strip(textoLimpio).trim();
     const teniaEmojis = emoji.hasEmoji(textoLimpio);
 
-    // 2. Evaluar Saludo Puro
+    // Evaluar Saludo Puro
     const palabraLimpia = textoSinEmojis.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
     const esSaludoPuro = DICCIONARIO_SALUDOS.includes(palabraLimpia);
 
-    // ─── Jerarquía de Reglas ───
+    // Jerarquía de Reglas
     let tipo = 'Solo Comentarios';
-    
     const textoSinEspacios = textoLimpio.replace(/\s+/g, '');
     const todosHashtagsUnidos = hashtags.join('');
 
@@ -75,10 +69,9 @@ function clasificarYSentimiento(textoOriginal) {
         tipo = 'Comentarios con HashTag';
     }
 
-    // ─── Análisis de Sentimiento Basado en Reglas/Diccionario ───
+    // Análisis de Sentimiento
     let analisisSentimiento = 'Neutral';
     if (tipo === 'Solo Emoticons') {
-        // Regla simple para emojis comunes de prueba
         if (textoLimpio.includes('❤️') || textoLimpio.includes('🔥') || textoLimpio.includes('😂') || textoLimpio.includes('👍')) {
             analisisSentimiento = 'Positivo';
         } else if (textoLimpio.includes('😡') || textoLimpio.includes('🤮') || textoLimpio.includes('👎')) {
@@ -92,29 +85,17 @@ function clasificarYSentimiento(textoOriginal) {
         if (resultadoScore.score < 0) analisisSentimiento = 'Negativo';
     }
 
-    return { tipo, sentimiento: analisisSentimiento, hashtagsLimpios: hashtags.map(tag => tag.replace('#', '').toLowerCase()) };
+    return { 
+        tipo, 
+        sentimiento: analisisSentimiento, 
+        hashtagsLimpios: hashtags.map(tag => tag.replace('#', '').toLowerCase()) 
+    };
 }
 
-// =====================================================================
-// ENDPOINTS / RUTAS DE LA API
-// =====================================================================
 
-// Explicación de objetivo de sitio (Requerimiento 1)
-app.get('/api/info', (req, res) => {
-    res.json({
-        objetivo: "Plataforma modular para el análisis semántico, clasificación de sentimiento y asignación de control de interacciones/comentarios de YouTube orientada a la gestión organizacional de organizaciones aliadas."
-    });
-});
-
-// Endpoint Crítico: Ingesta de CSV de Comentarios (Solo Admin de forma lógica)
-// app.post('/api/comments/upload-csv', upload.single('archivo_comentarios'), async (req, res) => {
-// Cambiar '/api/comments/upload-csv' por '/api/upload'
-// Cambiamos upload.single por upload.any() para que acepte cualquier nombre de campo que mande Netlify
-
-// Cambiamos la ruta a '/api/upload' para que coincida perfectamente con Netlify
+// 5. ENDPOINT CRÍTICO: INGESTA DE CSV (Escuchando en /api/upload de forma robusta)
 app.post('/api/upload', upload.any(), async (req, res) => {
-try {
-        // Validar que llegó el archivo en el arreglo de Multer
+    try {
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({ error: "No se subió ningún archivo CSV." });
         }
@@ -122,7 +103,7 @@ try {
         const archivoSubido = req.files[0];
         const esEnVivo = req.body.is_live_comment === 'true';
 
-        // 1. Obtener el número consecutivo correlativo del archivo
+        // Obtener el número consecutivo correlativo del archivo
         const { data: ultimoComentario } = await supabase
             .from('youtube_comments')
             .select('file_sequence_number')
@@ -135,19 +116,15 @@ try {
         // PARSEO DEL ARCHIVO CSV DESDE MEMORIA BUFFER
         const resultadosCsv = [];
         const bufferStream = new stream.PassThrough();
-        bufferStream.end(archivoSubido.buffer); // <-- Cambiado req.file.buffer por archivoSubido.buffer
+        bufferStream.end(archivoSubido.buffer);
 
         bufferStream
             .pipe(csv())
-        // ... todo el resto de tu código para abajo (el .on('data') y .on('end')) se queda EXACTAMENTE IGUAL
-
             .on('data', (data) => resultadosCsv.push(data))
             .on('end', async () => {
                 try {
-                    console.log(`💬 CSV recibido. Procesando ${resultadosCsv.length} filas...`);                   
-                    // ... TODO TU CICLO FOR PERMANECE IGUAL QUE ANTES ...
+                    console.log(`💬 CSV leído en memoria. Procesando ${resultadosCsv.length} filas...`);
                     
-                    // Procesamiento secuencial controlado
                     for (const fila of resultadosCsv) {
                         const authorName = fila['Author Name'] || fila['author_name'];
                         const commentText = fila['Comments Text'] || fila['comments_text'];
@@ -156,7 +133,7 @@ try {
                         const channelUrl = fila['Author Channel URL'] || fila['author_channel_url'];
                         const idOriginal = fila['Id'] || fila['id'];
 
-                        if (!authorName) continue;
+                        if (!authorName) continue; // Saltar filas vacías o corruptas
 
                         const textoProcesadoEmojis = emoji.emojify(commentText || "");
                         const analitica = clasificarYSentimiento(textoProcesadoEmojis);
@@ -180,7 +157,7 @@ try {
                                 }]);
                         }
 
-                        // INSERCIÓN DEL COMENTARIO
+                        // INSERCION DEL COMENTARIO
                         const { data: comentarioInsertado, error: errComment } = await supabase
                             .from('youtube_comments')
                             .insert([{
@@ -202,7 +179,7 @@ try {
                             console.error("❌ Error insertando comentario en Supabase:", errComment);
                         }
 
-                        // INSERCIÓN DE HASHTAGS
+                        // INSERCIÓN DE HASHTAGS (Si existen)
                         if (comentarioInsertado && analitica.hashtagsLimpios.length > 0) {
                             const insertsHashtags = analitica.hashtagsLimpios.map(tag => ({
                                 comment_id: comentarioInsertado.internal_id,
@@ -212,7 +189,7 @@ try {
                         }
                     }
 
-                    console.log("✅ ¡Procesamiento completado con éxito!");
+                    console.log("✅ ¡Procesamiento completado exitosamente!");
                     return res.json({ 
                         mensaje: "Archivo procesado e ingresado exitosamente.", 
                         consecutivo_asignado: consecutivoActual,
@@ -231,13 +208,10 @@ try {
     }
 });
 
-// Endpoint para el Dashboard Dinámico (Muestra métricas unificadas)
+
+// 6. ENDPOINT PARA DASHBOARD DINÁMICO
 app.get('/api/dashboard/metrics', async (req, res) => {
     try {
-        // Consultas agrupadas rápidas aprovechando los índices creados
-        const { data: tipoMétricas } = await supabase.rpc('get_comments_by_type_summary'); 
-        // Nota: Para la prueba ágil, podemos resolverlo también directamente mediante consultas de conteo normales:
-        
         const { count: totalComentarios } = await supabase.from('youtube_comments').select('*', { count: 'exact', head: true });
         const { count: pendientesAjuste } = await supabase.from('catalogo_usuarios_youtube').select('*', { count: 'exact', head: true }).eq('pendiente_actualizacion', true);
 
@@ -250,8 +224,9 @@ app.get('/api/dashboard/metrics', async (req, res) => {
     }
 });
 
+
 // Inicialización de Puerto para Render
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`Servidor de pruebas corriendo en puerto ${PORT}`);
+    console.log(`🚀 Servidor backend escuchando exitosamente en el puerto ${PORT}`);
 });
