@@ -9,10 +9,10 @@ const { createClient } = require('@supabase/supabase-js');
 const stream = require('stream');
 
 const app = express();
-const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } }); // Limite 10MB para pruebas
+const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } }); // Limite 10MB
 const sentiment = new Sentiment();
 
-// 1. Configuración de Middlewares (Seguridad CORS Corregida con Arreglo y Comas)
+// 1. Configuración de Middlewares (Seguridad CORS Flexible)
 app.use(cors({
   origin: [
     'https://sensational-druid-fcbe07.netlify.app',
@@ -24,37 +24,34 @@ app.use(cors({
 app.use(express.json());
 
 
-// 2. CONFIGURACIÓN DIRECTA Y SEGURA DE SUPABASE (URL Sanitizada sin sub-rutas)
+// 2. CONFIGURACIÓN DIRECTA DE SUPABASE (URL Sanitizada sin sub-rutas)
 const supabaseUrl = 'https://zhtclrjpowktkcnccmwx.supabase.co'; 
 const supabaseKey = 'sb_publishable_DowdOFlmdEUVv5FgeiT7EQ_fO170UiQ';
 
 console.log("=== CONTROL DE CONEXIÓN DIRECTA ===");
-console.log("URL Configurada:", supabaseUrl ? "Asignada Correctamente" : "Vacía");
+console.log("URL Supabase Base: Configurada Correctamente");
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 
-// 3. DICCIONARIO DE SALUDOS REQUERIDO POR TU LOGICA
+// 3. DICCIONARIO DE SALUDOS
 const DICCIONARIO_SALUDOS = ['hola', 'buenos dias', 'saludos', 'buenas tardes', 'buenas noches', 'buen dia'];
 
 
-// 4. TU FUNCIÓN ORIGINAL DE ANALÍTICA (Declarada antes del endpoint para evitar Scope errors)
+// 4. FUNCIÓN DE ANALÍTICA Y SENTIMIENTO (Blindada)
 function clasificarYSentimiento(textoOriginal) {
     const textoLimpio = textoOriginal ? textoOriginal.trim() : "";
     if (textoLimpio === "") {
         return { tipo: 'Solo Comentarios', sentimiento: 'Neutral', hashtagsLimpios: [] };
     }
 
-    // Manejo de Hashtags y Emojis
     const hashtags = textoLimpio.match(/#\w+/g) || [];
     const textoSinEmojis = emoji.strip(textoLimpio).trim();
     const teniaEmojis = emoji.hasEmoji(textoLimpio);
 
-    // Evaluar Saludo Puro
     const palabraLimpia = textoSinEmojis.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
     const esSaludoPuro = DICCIONARIO_SALUDOS.includes(palabraLimpia);
 
-    // Jerarquía de Reglas
     let tipo = 'Solo Comentarios';
     const textoSinEspacios = textoLimpio.replace(/\s+/g, '');
     const todosHashtagsUnidos = hashtags.join('');
@@ -69,7 +66,6 @@ function clasificarYSentimiento(textoOriginal) {
         tipo = 'Comentarios con HashTag';
     }
 
-    // Análisis de Sentimiento
     let analisisSentimiento = 'Neutral';
     if (tipo === 'Solo Emoticons') {
         if (textoLimpio.includes('❤️') || textoLimpio.includes('🔥') || textoLimpio.includes('😂') || textoLimpio.includes('👍')) {
@@ -81,7 +77,6 @@ function clasificarYSentimiento(textoOriginal) {
         analisisSentimiento = 'Positivo';
     } else {
         try {
-            // Intento de análisis seguro usando la instancia o la función directa
             const resultadoScore = (typeof sentiment.analyze === 'function') 
                 ? sentiment.analyze(textoLimpio) 
                 : (typeof sentiment === 'function' ? sentiment(textoLimpio) : { score: 0 });
@@ -89,7 +84,6 @@ function clasificarYSentimiento(textoOriginal) {
             if (resultadoScore && resultadoScore.score > 0) analisisSentimiento = 'Positivo';
             else if (resultadoScore && resultadoScore.score < 0) analisisSentimiento = 'Negativo';
         } catch (e) {
-            console.log("⚠️ Error en análisis de sentimiento, asignando Neutral por defecto");
             analisisSentimiento = 'Neutral';
         }
     }
@@ -102,7 +96,7 @@ function clasificarYSentimiento(textoOriginal) {
 }
 
 
-// 5. ENDPOINT CRÍTICO: INGESTA DE CSV (Escuchando en /api/upload de forma robusta)
+// 5. ENDPOINT REESCRITO CON LAS NUEVAS REGLAS ANALÍTICAS
 app.post('/api/upload', upload.any(), async (req, res) => {
     try {
         if (!req.files || req.files.length === 0) {
@@ -110,19 +104,26 @@ app.post('/api/upload', upload.any(), async (req, res) => {
         }
         
         const archivoSubido = req.files[0];
+        const nombreArchivo = archivoSubido.originalname || ""; // Ej: data20260521.csv
         const esEnVivo = req.body.is_live_comment === 'true';
 
-        // Obtener el número consecutivo correlativo del archivo
-        const { data: ultimoComentario } = await supabase
-            .from('youtube_comments')
-            .select('file_sequence_number')
-            .order('file_sequence_number', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+        // --- EXTRACCIÓN DINÁMICA DE FECHAS DESDE EL NOMBRE DEL ARCHIVO ---
+        let fechaTxt = "00000000";
+        let anoTxt = "0000";
+        let anoMesTxt = "0000-00";
 
-        const consecutivoActual = ultimoComentario ? ultimoComentario.file_sequence_number + 1 : 1;
+        // Busca una secuencia de 8 números en el nombre del archivo (ej: 20260521)
+        const matchFecha = nombreArchivo.match(/\d{8}/);
+        if (matchFecha) {
+            fechaTxt = matchFecha[0]; // "20260521"
+            anoTxt = fechaTxt.substring(0, 4); // "2026"
+            anoMesTxt = `${anoTxt}-${fechaTxt.substring(4, 6)}`; // "2026-05"
+        }
 
-        // PARSEO DEL ARCHIVO CSV DESDE MEMORIA BUFFER
+        console.log(`📂 Procesando archivo: ${nombreArchivo}`);
+        console.log(`📆 Dimensiones detectadas -> Fecha: ${fechaTxt}, Año: ${anoTxt}, Período: ${anoMesTxt}`);
+
+        // PARSEO DEL ARCHIVO CSV
         const resultadosCsv = [];
         const bufferStream = new stream.PassThrough();
         bufferStream.end(archivoSubido.buffer);
@@ -132,20 +133,24 @@ app.post('/api/upload', upload.any(), async (req, res) => {
             .on('data', (data) => resultadosCsv.push(data))
             .on('end', async () => {
                 try {
-                    console.log(`💬 CSV leído en memoria. Procesando ${resultadosCsv.length} filas...`);
+                    console.log(`💬 CSV cargado. Procesando ${resultadosCsv.length} registros...`);
                     
+                    // Inicializar contador consecutivo en 1 para este archivo específico
+                    let contadorFila = 1;
+
                     for (const fila of resultadosCsv) {
                         const authorName = fila['Author Name'] || fila['author_name'];
                         const commentText = fila['Comments Text'] || fila['comments_text'];
-                        const videoTime = fila['Video Time'] || fila['video_time'];
                         const messageTime = fila['Message Time'] || fila['message_time'];
-                        const channelUrl = fila['Author Channel URL'] || fila['author_channel_url'];
-                        const idOriginal = fila['Id'] || fila['id'];
 
-                        if (!authorName) continue; // Saltar filas vacías o corruptas
+                        if (!authorName) continue; // Saltar filas vacías
 
+                        // Procesamiento semántico
                         const textoProcesadoEmojis = emoji.emojify(commentText || "");
                         const analitica = clasificarYSentimiento(textoProcesadoEmojis);
+
+                        // Cálculo dinámico de URL del Canal
+                        const urlCanalCalculada = `https://www.youtube.com/${encodeURIComponent(authorName.trim())}`;
 
                         // LÓGICA UPSERT DE USUARIO EXTERNO
                         const { data: usuarioExistente } = await supabase
@@ -160,32 +165,34 @@ app.post('/api/upload', upload.any(), async (req, res) => {
                                 .insert([{
                                     usuario_youtube_display: authorName,
                                     usuario_llave: authorName,
-                                    url_canal: channelUrl || null,
+                                    url_canal: urlCanalCalculada,
                                     es_externo: true,
                                     pendiente_actualizacion: true
                                 }]);
                         }
 
-                        // INSERCION DEL COMENTARIO
+                        // INSERCIÓN SIMPLIFICADA DEL COMENTARIO (Cumpliendo la nueva estructura)
                         const { data: comentarioInsertado, error: errComment } = await supabase
                             .from('youtube_comments')
                             .insert([{
-                                file_sequence_number: consecutivoActual,
-                                youtube_id: idOriginal || null,
+                                internal_id: contadorFila,          // Consecutivo dinámico local (1, 2, 3...)
                                 author_name: authorName,
                                 comments_text: textoProcesadoEmojis,
-                                video_time: videoTime || null,
                                 message_time: messageTime ? new Date(messageTime) : new Date(),
-                                author_channel_url: channelUrl || null,
+                                author_channel_url: urlCanalCalculada,
                                 is_live_comment: esEnVivo,
                                 tipo_comentario: analitica.tipo,
-                                sentimiento: analitica.sentimiento
+                                sentimiento: analitica.sentimiento,
+                                uploaded_at: new Date(),            // Fecha de carga calculada por el backend
+                                fecha_txt: fechaTxt,                // "20260521"
+                                año_txt: anoTxt,                    // "2026"
+                                año_mes_txt: anoMesTxt              // "2026-05"
                             }])
-                            .select('internal_id')
-                            .single();
+                            .select('internal_id') 
+                            .maybeSingle();
 
                         if (errComment) {
-                            console.error("❌ Error insertando comentario en Supabase:", errComment);
+                            console.error(`❌ Error en fila ${contadorFila} (Autor: ${authorName}):`, errComment.message);
                         }
 
                         // INSERCIÓN DE HASHTAGS (Si existen)
@@ -196,29 +203,31 @@ app.post('/api/upload', upload.any(), async (req, res) => {
                             }));
                             await supabase.from('comment_hashtags').insert(insertsHashtags);
                         }
+
+                        // Incrementar el consecutivo para la siguiente fila del archivo
+                        contadorFila++;
                     }
 
-                    console.log("✅ ¡Procesamiento completado exitosamente!");
+                    console.log("✅ ¡Procesamiento e ingesta completados exitosamente!");
                     return res.json({ 
                         mensaje: "Archivo procesado e ingresado exitosamente.", 
-                        consecutivo_asignado: consecutivoActual,
                         total_registros: resultadosCsv.length
                     });
 
                 } catch (errInterno) {
-                    console.error("❌ ERROR CRÍTICO DENTRO DEL BUCLE CSV:", errInterno);
-                    return res.status(500).json({ error: "Falla interna al procesar las filas del CSV.", detalle: errInterno.message });
+                    console.error("❌ ERROR EN EL PROCESAMIENTO INTERNO:", errInterno);
+                    return res.status(500).json({ error: "Falla interna al procesar el archivo.", detalle: errInterno.message });
                 }
             });
 
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: "Falla crítica en el procesamiento del servidor." });
+        res.status(500).json({ error: "Falla crítica en el servidor." });
     }
 });
 
 
-// 6. ENDPOINT PARA DASHBOARD DINÁMICO
+// 6. ENDPOINT PARA DASHBOARD
 app.get('/api/dashboard/metrics', async (req, res) => {
     try {
         const { count: totalComentarios } = await supabase.from('youtube_comments').select('*', { count: 'exact', head: true });
@@ -234,7 +243,6 @@ app.get('/api/dashboard/metrics', async (req, res) => {
 });
 
 
-// Inicialización de Puerto para Render
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`🚀 Servidor backend escuchando exitosamente en el puerto ${PORT}`);
