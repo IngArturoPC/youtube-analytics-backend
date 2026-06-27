@@ -192,7 +192,8 @@ app.post('/api/upload', upload.any(), async (req, res) => {
                             }])
                             .select('internal_id') // Cambiamos a select('*') para que traiga la PK que genere Supabase automáticamente
                             .maybeSingle();
-
+                            // Control de cambio forzado 2026
+                            
                         if (errComment) {
                             console.error(`❌ Error en fila ${contadorFila} (Autor: ${authorName}):`, errComment.message);
                         }
