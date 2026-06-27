@@ -175,7 +175,7 @@ app.post('/api/upload', upload.any(), async (req, res) => {
                         const { data: comentarioInsertado, error: errComment } = await supabase
                             .from('youtube_comments')
                             .insert([{
-                                internal_id: contadorFila,          // Consecutivo dinámico local (1, 2, 3...)
+                                //internal_id: contadorFila,          // Consecutivo dinámico local (1, 2, 3...)
                                 author_name: authorName,
                                 comments_text: textoProcesadoEmojis,
                                 message_time: messageTime ? new Date(messageTime) : new Date(),
@@ -188,7 +188,7 @@ app.post('/api/upload', upload.any(), async (req, res) => {
                                 año_txt: anoTxt,                    // "2026"
                                 año_mes_txt: anoMesTxt              // "2026-05"
                             }])
-                            .select('internal_id') 
+                            .select('*') // Cambiamos a select('*') para que traiga la PK que genere Supabase automáticamente
                             .maybeSingle();
 
                         if (errComment) {
