@@ -118,10 +118,17 @@ app.get('/api/info', (req, res) => {
 // Endpoint Crítico: Ingesta de CSV de Comentarios (Solo Admin de forma lógica)
 // app.post('/api/comments/upload-csv', upload.single('archivo_comentarios'), async (req, res) => {
     // Cambiar '/api/comments/upload-csv' por '/api/upload'
-app.post('/api/upload', upload.single('archivo_comentarios'), async (req, res) => {
+// Cambiamos upload.single por upload.any() para que acepte cualquier nombre de campo que mande Netlify
+app.post('/api/upload', upload.any(), async (req, res) => {
     try {
-        if (!req.file) return res.status(400).json({ error: "No se subió ningún archivo CSV." });
+        // Al usar upload.any(), los archivos llegan en un arreglo req.files
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ error: "No se subió ningún archivo CSV." });
+        }
         
+        // Tomamos el primer archivo que venga en el formulario
+        const archivoSubido = req.files[0];
+
         // Determinar si el usuario indicó si es en vivo o estático desde el frontend
         const esEnVivo = req.body.is_live_comment === 'true';
 
@@ -135,17 +142,18 @@ app.post('/api/upload', upload.single('archivo_comentarios'), async (req, res) =
 
         const consecutivoActual = ultimoComentario ? ultimoComentario.file_sequence_number + 1 : 1;
 
-        // PARSEO DEL ARCHIVO CSV DESDE MEMORIA BUFFER
+        // PARSEO DEL ARCHIVO CSV DESDE MEMORIA BUFFER (Usando archivoSubido)
         const resultadosCsv = [];
         const bufferStream = new stream.PassThrough();
-        bufferStream.end(req.file.buffer);
+        bufferStream.end(archivoSubido.buffer);
 
         bufferStream
             .pipe(csv())
             .on('data', (data) => resultadosCsv.push(data))
             .on('end', async () => {
                 try {
-                    console.log(`💬 CSV leído en memoria. Procesando ${resultadosCsv.length} filas...`);
+                    console.log(`💬 CSV recibido. Procesando ${resultadosCsv.length} filas...`);                   
+                    // ... TODO TU CICLO FOR PERMANECE IGUAL QUE ANTES ...
                     
                     // Procesamiento secuencial controlado
                     for (const fila of resultadosCsv) {
