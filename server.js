@@ -80,9 +80,18 @@ function clasificarYSentimiento(textoOriginal) {
     } else if (tipo === 'Solo Saludos') {
         analisisSentimiento = 'Positivo';
     } else {
-        const resultadoScore = sentiment.analyze(textoLimpio);
-        if (resultadoScore.score > 0) analisisSentimiento = 'Positivo';
-        if (resultadoScore.score < 0) analisisSentimiento = 'Negativo';
+        try {
+            // Intento de análisis seguro usando la instancia o la función directa
+            const resultadoScore = (typeof sentiment.analyze === 'function') 
+                ? sentiment.analyze(textoLimpio) 
+                : (typeof sentiment === 'function' ? sentiment(textoLimpio) : { score: 0 });
+
+            if (resultadoScore && resultadoScore.score > 0) analisisSentimiento = 'Positivo';
+            else if (resultadoScore && resultadoScore.score < 0) analisisSentimiento = 'Negativo';
+        } catch (e) {
+            console.log("⚠️ Error en análisis de sentimiento, asignando Neutral por defecto");
+            analisisSentimiento = 'Neutral';
+        }
     }
 
     return { 
