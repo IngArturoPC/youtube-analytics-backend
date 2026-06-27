@@ -110,15 +110,15 @@ app.post('/api/upload', upload.any(), async (req, res) => {
 
         // --- EXTRACCIÓN DINÁMICA DE FECHAS DESDE EL NOMBRE DEL ARCHIVO ---
         let fechaTxt = "00000000";
-        let anoTxt = "0000";
-        let anoMesTxt = "0000-00";
+        let anioTxt = "0000";
+        let anioMesTxt = "0000-00";
 
         // Busca una secuencia de 8 números en el nombre del archivo (ej: 20260521)
         const matchFecha = nombreArchivo.match(/\d{8}/);
         if (matchFecha) {
             fechaTxt = matchFecha[0]; // "20260521"
-            anoTxt = fechaTxt.substring(0, 4); // "2026"
-            anoMesTxt = `${anoTxt}-${fechaTxt.substring(4, 6)}`; // "2026-05"
+            anioTxt = fechaTxt.substring(0, 4); // "2026"
+            anioMesTxt = `${anioTxt}-${fechaTxt.substring(4, 6)}`; // "2026-05"
         }
 
         console.log(`📂 Procesando archivo: ${nombreArchivo}`);
@@ -188,8 +188,8 @@ app.post('/api/upload', upload.any(), async (req, res) => {
                                 sentimiento: analitica.sentimiento,
                                 uploaded_at: new Date(),            // Fecha de carga calculada por el backend
                                 fecha_txt: fechaTxt,                // "20260521"
-                                año_txt: anoTxt,                    // "2026"
-                                año_mes_txt: anoMesTxt              // "2026-05"
+                                anio_txt: anioTxt,                  // "2026"
+                                anio_mes_txt: anioMesTxt            // "2026-05"
                             }])
                             .select('internal_id') // Cambiamos a select('*') para que traiga la PK que genere Supabase automáticamente
                             .maybeSingle();
