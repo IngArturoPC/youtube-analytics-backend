@@ -23,17 +23,6 @@ app.use(cors({
 app.use(express.json());
 
 
-/* console.log("Revisando variables en Render:", {
-  hasUrl: !!process.env.SUPABASE_URL,
-  hasKey: !!process.env.SUPABASE_KEY
-});
-
-// Inicialización del Cliente de Supabase (Limpiando espacios invisibles con .trim())
-const supabase = createClient(
-  (process.env.SUPABASE_URL || '').trim(), 
-  (process.env.SUPABASE_KEY || '').trim()
-); */
-
 // ====== CONFIGURACIÓN DIRECTA Y SEGURA ======
 // Reemplaza los textos de abajo por tus credenciales reales de Supabase
 const supabaseUrl = 'https://zhtclrjpowktkcnccmwx.supabase.co/rest/v1/'; 
@@ -124,7 +113,8 @@ app.get('/api/info', (req, res) => {
 
 // Cambiamos la ruta a '/api/upload' para que coincida perfectamente con Netlify
 app.post('/api/upload', upload.any(), async (req, res) => {
-    try {
+try {
+        // Validar que llegó el archivo en el arreglo de Multer
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({ error: "No se subió ningún archivo CSV." });
         }
@@ -145,10 +135,12 @@ app.post('/api/upload', upload.any(), async (req, res) => {
         // PARSEO DEL ARCHIVO CSV DESDE MEMORIA BUFFER
         const resultadosCsv = [];
         const bufferStream = new stream.PassThrough();
-        bufferStream.end(archivoSubido.buffer);
+        bufferStream.end(archivoSubido.buffer); // <-- Cambiado req.file.buffer por archivoSubido.buffer
 
         bufferStream
             .pipe(csv())
+        // ... todo el resto de tu código para abajo (el .on('data') y .on('end')) se queda EXACTAMENTE IGUAL
+
             .on('data', (data) => resultadosCsv.push(data))
             .on('end', async () => {
                 try {
