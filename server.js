@@ -121,7 +121,7 @@ app.post('/api/upload', upload.any(), async (req, res) => {
         }
 
         console.log(`📂 Procesando archivo: ${nombreArchivo}`);
-        console.log(`📆 Dimensiones detectadas -> Fecha: ${fechaTxt}, Año: ${anoTxt}, Período: ${anoMesTxt}`);
+        console.log(`📆 Dimensiones detectadas -> Fecha: ${fechaTxt}, Año: ${anioTxt}, Período: ${anioMesTxt}`);
 
         // PARSEO DEL ARCHIVO CSV
         const resultadosCsv = [];
