@@ -12,13 +12,12 @@ const app = express();
 const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } }); // Limite 10MB
 const sentiment = new Sentiment();
 
-// 1. Configuración de Middlewares (Seguridad CORS Flexible)
-// Configuración de Middlewares (Seguridad CORS Corregida y Sanitizada)
+// Configuración de Middlewares (CORS Corregido con corchetes y comas)
 app.use(cors({
   origin: [
     'https://sensational-druid-fcbe07.netlify.app',
     'https://sensational-druid-fcbe07.netlify.app/'
-  ], // <--- Asegúrate de que cierre el corchete y tenga esta coma
+  ], // <--- Verifica que tenga los corchetes [] y esta coma al final
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
