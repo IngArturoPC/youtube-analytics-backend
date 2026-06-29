@@ -250,3 +250,5 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`🚀 Servidor backend escuchando exitosamente en el puerto ${PORT}`);
 });
+
+// Forzar compilacion definitiva junio 2026
