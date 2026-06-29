@@ -175,9 +175,7 @@ app.post('/api/upload', upload.any(), async (req, res) => {
                         const { data: comentarioInsertado, error: errComment } = await supabase
                             .from('youtube_comments')
                             .insert([{
-                                internal_id: Number(contadorFila) || 1, // Enviar el consecutivo del bucle de forma segura
-                                author_name: authorName,
-                                contadorFila,          // Consecutivo dinámico local (1, 2, 3...)
+                                //internal_id: Number(contadorFila) || 1, // Enviar el consecutivo del bucle de forma segura
                                 author_name: authorName,
                                 comments_text: textoProcesadoEmojis,
                                 message_time: messageTime ? new Date(messageTime) : new Date(),
@@ -190,10 +188,9 @@ app.post('/api/upload', upload.any(), async (req, res) => {
                                 anio_txt: anioTxt,                  // "2026"
                                 anio_mes_txt: anioMesTxt            // "2026-05"
                             }])
-                            .select('internal_id') // Cambiamos a select('*') para que traiga la PK que genere Supabase automáticamente
+                            .select('*') // Trae toda la fila generada por la BD (incluyendo su nuevo internal_id automático)
                             .maybeSingle();
-                            // Control de cambio forzado 2026
-                            
+                                                        
                         if (errComment) {
                             console.error(`❌ Error en fila ${contadorFila} (Autor: ${authorName}):`, errComment.message);
                         }
