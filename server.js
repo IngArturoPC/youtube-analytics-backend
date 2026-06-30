@@ -97,7 +97,7 @@ function clasificarYSentimiento(textoOriginal) {
 
 
 // 5. ENDPOINT REESCRITO CON LAS NUEVAS REGLAS ANALÍTICAS
-app.post('/api/upload', upload.any(), async (req, res) => {
+app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
     try {
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({ error: "No se subió ningún archivo CSV." });
@@ -193,8 +193,6 @@ app.post('/api/upload', upload.any(), async (req, res) => {
                                 // ⚠️ Nota: 'anio_txt' fue removido. NO lo agregues aquí, Supabase lo calcula solo.
                                 anio_mes_txt: anioMesTxt            // "2026-05"
                             }])
-
-
                             .select('*') // Trae toda la fila generada por la BD (incluyendo su nuevo internal_id automático)
                             .maybeSingle();
                                                         
