@@ -220,10 +220,13 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                     }
 
                     console.log("✅ ¡Procesamiento e ingesta de datos completada exitosamente!");
-                    return res.json({ 
+                    
+                    // Forzamos el Content-Type y enviamos un estatus 200 limpio
+                    res.setHeader('Content-Type', 'application/json');
+                    return res.status(200).send(JSON.stringify({ 
                         mensaje: "Archivo procesado e ingresado exitosamente.", 
                         total_registros: Number(resultadosCsv.length)
-                    });
+                    }));
 
                 } catch (errInterno) {
                     console.error("❌ ERROR EN EL PROCESAMIENTO INTERNO:", errInterno);
