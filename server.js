@@ -254,3 +254,36 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`🚀 Servidor backend escuchando exitosamente en el puerto ${PORT}`);
 });
+
+
+// ENDPOINT PARA ACTUALIZAR GRUPOS DE UN USUARIO DESDE EL FORMULARIO WEB
+app.put('/api/users/update-groups', async (req, res) => {
+    try {
+        const { usuario_llave, grupos, es_externo } = req.body;
+
+        if (!usuario_llave) {
+            return res.status(400).json({ error: "El usuario_llave es requerido." });
+        }
+
+        // Aquí mapeamos los grupos que envíe el formulario. 
+        // Puedes guardarlos como columnas separadas o adaptar según tus columnas de Supabase.
+        const { data, error } = await supabase
+            .from('catalogo_usuarios_youtube')
+            .update({
+                grupo_1: grupos[0] || null,
+                grupo_2: grupos[1] || null,
+                grupo_3: grupos[2] || null,
+                es_externo: es_externo !== undefined ? es_externo : true,
+                pendiente_actualizacion: false // ¡Aquí lo "activamos" y quitamos la alerta!
+            })
+            .eq('usuario_llave', usuario_llave)
+            .select();
+
+        if (error) throw error;
+
+        res.json({ mensaje: "Usuario actualizado y activado con éxito", usuario: data });
+    } catch (error) {
+        console.error("❌ Error al actualizar usuario:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
