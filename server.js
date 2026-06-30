@@ -148,26 +148,30 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                         const textoProcesadoEmojis = emoji.emojify(commentText);
                         const analitica = clasificarYSentimiento(textoProcesadoEmojis);
 
-                        // UPSERT del Catálogo de Usuarios
-                        const { data: usuarioExistente } = await supabase
-                            .from('catalogo_usuarios_youtube')
-                            .select('usuario_llave')
-                            .eq('usuario_llave', authorName)
-                            .maybeSingle();
 
-                        if (!usuarioExistente) {
-                            await supabase
-                                .from('catalogo_usuarios_youtube')
-                                .insert([{
+// --- LÓGICA DE USUARIO EN EL CATÁLOGO (UPSERT BLINDADO) ---
+                        // Reemplazamos el SELECT + INSERT por un UPSERT nativo con await estricto
+                        const { error: errUpsertUser } = await supabase
+                            .from('catalogo_usuarios_youtube')
+                            .upsert(
+                                {
                                     usuario_youtube_display: authorName,
-                                    usuario_llave: authorName,
+                                    usuario_llave: authorName, // Llave primaria/restricción única
                                     url_canal: urlCanalCalculada,
                                     es_externo: true,
                                     pendiente_actualizacion: true
-                                }]);
+                                },
+                                { onConflict: 'usuario_llave', ignoreDuplicates: true }
+                            );
+
+                        if (errUpsertUser) {
+                            console.warn(`⚠️ Error al asegurar el usuario ${authorName} en el catálogo:`, errUpsertUser.message);
+                            // Si falla la inserción del usuario, no continuamos con el comentario para evitar violar la FK
+                            contadorFila++;
+                            continue;
                         }
 
-                        // INSERCIÓN DEL COMENTARIO (Delegando 'anio_txt' a Supabase)
+                        // --- INSERCIÓN EN LA TABLA youtube_comments ---
                         const { data: comentarioInsertado, error: errComment } = await supabase
                             .from('youtube_comments')
                             .insert([{
@@ -184,11 +188,14 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                                 fecha_txt: fechaTxt,                
                                 anio_mes_txt: anioMesTxt            
                             }])
-                            .select('internal_id') // Obtenemos el ID asignado para la relación posterior
+                            .select('internal_id') 
                             .maybeSingle();
                                                         
                         if (errComment) {
-                            console.error(`❌ Error en fila ${contadorFila}:`, errComment.message);
+                            console.error(`❌ Error insertando comentario en fila ${contadorFila} (Autor: ${authorName}):`, errComment.message);
+                            // En lugar de lanzar un throw Error general que tire el servidor (Error 500), 
+                            // dejamos que continúe con la siguiente fila del CSV de forma segura
+                            contadorFila++;
                             continue;
                         }
 
