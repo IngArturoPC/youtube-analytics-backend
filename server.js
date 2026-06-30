@@ -226,3 +226,23 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
         res.status(500).json({ error: "Falla crítica en el servidor." });
     }
 });
+
+// 6. ENDPOINT PARA DASHBOARD
+app.get('/api/dashboard/metrics', async (req, res) => {
+    try {
+        const { count: totalComentarios } = await supabase.from('youtube_comments').select('*', { count: 'exact', head: true });
+        const { count: pendientesAjuste } = await supabase.from('catalogo_usuarios_youtube').select('*', { count: 'exact', head: true }).eq('pendiente_actualizacion', true);
+
+        res.json({
+            total_comentarios_acumulados: totalComentarios,
+            alertas_usuarios_externos: pendientesAjuste
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+    console.log(`🚀 Servidor backend escuchando exitosamente en el puerto ${PORT}`);
+});
