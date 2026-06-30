@@ -205,7 +205,7 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                                 continue;
                             }
 
-                            // Inserción de Hashtags relacionales
+                           // Inserción de Hashtags relacionales
                             if (comentarioInsertado && analitica.hashtagsLimpios.length > 0) {
                                 const insertsHashtags = analitica.hashtagsLimpios.map(tag => ({
                                     comment_id: comentarioInsertado.internal_id, 
@@ -218,16 +218,17 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                                     console.warn(`⚠️ Error insertando hashtag (Num CSV: ${numConsecutivo}):`, errTags.message);
                                 }
                             }
-                        }
+                        } // <- Cierra el bucle for
 
                         // Resolvemos la promesa entregando el total de filas leídas
                         resolve(resultadosCsv.length);
 
                     } catch (errBucle) {
+                        // El catch debe cerrar AQUÍ, protegiendo lo que pasa dentro del evento end
                         reject(errBucle);
                     }
-                });
-        });
+                }); // <- Cierra el .on('end', async () => {
+        }); // <- Cierra la Promise nativa
 
         // --- LA RESPUESTA QUEDA PERFECTAMENTE FUERA DEL STREAM ---
         console.log("✅ ¡Procesamiento e ingesta de datos completada exitosamente!");
@@ -243,7 +244,7 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
             return res.status(500).json({ error: "Falla crítica en el servidor.", detalle: error.message });
         }
     }
-});
+}); // /api/comments/upload-csv
 
 
 // 6. ENDPOINT PARA DASHBOARD
