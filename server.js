@@ -184,6 +184,8 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                         }
 
                         // --- INSERCIÓN EN LA TABLA youtube_comments ---
+                        // Aseguramos enviar únicamente las columnas de datos. 
+                        // JAMÁS enviamos 'internal_id' ni 'anio_txt' para que PostgreSQL use sus valores automáticos.
                         const { data: comentarioInsertado, error: errComment } = await supabase
                             .from('youtube_comments')
                             .insert([{
@@ -200,13 +202,11 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                                 fecha_txt: fechaTxt,                
                                 anio_mes_txt: anioMesTxt            
                             }])
-                            .select('internal_id') 
+                            .select('internal_id') // Le pedimos que nos devuelva el ID que generó sólito
                             .maybeSingle();
                                                         
                         if (errComment) {
                             console.error(`❌ Error insertando comentario en fila ${contadorFila} (Autor: ${authorName}):`, errComment.message);
-                            // En lugar de lanzar un throw Error general que tire el servidor (Error 500), 
-                            // dejamos que continúe con la siguiente fila del CSV de forma segura
                             contadorFila++;
                             continue;
                         }
