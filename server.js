@@ -12,7 +12,7 @@ const app = express();
 const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } }); // Límite 10MB
 const sentiment = new Sentiment();
 
-// 1. CONFIGURACIÓN DE MIDDLEWARES
+// 1. CONFIGURACIÓN DE MIDDLEWARES (Conexión segura con Netlify)
 app.use(cors({
   origin: [
     'https://sensational-druid-fcbe07.netlify.app',
@@ -48,8 +48,9 @@ function clasificarYSentimiento(textoOriginal) {
     }
 
     const regexHashtags = /#\w+/g;
-    const hashtags = textoLimpio.match(regexHashtags) || [];
-    const hashtagsLimpios = [...new Set(hashtags)].map(tag => tag.replace('#', '').toLowerCase());
+    const hashtags = textoLoptio || [];
+    const hashtagsMatch = textoLimpio.match(regexHashtags) || [];
+    const hashtagsLimpios = [...new Set(hashtagsMatch)].map(tag => tag.replace('#', '').toLowerCase());
 
     const textoSinEmojis = emoji.strip(textoLimpio).trim();
     const teniaEmojis = emoji.strip(textoLimpio) !== textoLimpio;
@@ -59,15 +60,15 @@ function clasificarYSentimiento(textoOriginal) {
 
     let tipo = 'Solo Comentarios';
     const textoSinEspacios = textoLimpio.replace(/\s+/g, '');
-    const todosHashtagsUnidos = hashtags.join('');
+    const todosHashtagsUnidos = hashtagsMatch.join('');
 
-    if (hashtags.length > 0 && textoSinEspacios === todosHashtagsUnidos) {
+    if (hashtagsMatch.length > 0 && textoSinEspacios === todosHashtagsUnidos) {
         tipo = 'Solo HashTag';
     } else if (teniaEmojis && textoSinEmojis === "") {
         tipo = 'Solo Emoticons';
-    } else if (contieneSaludo && hashtags.length === 0) {
+    } else if (contieneSaludo && hashtagsMatch.length === 0) {
         tipo = 'Solo Saludos';
-    } else if (hashtags.length > 0) {
+    } else if (hashtagsMatch.length > 0) {
         tipo = 'Comentarios con HashTag';
     } else {
         tipo = 'Solo Comentarios';
@@ -95,7 +96,7 @@ function clasificarYSentimiento(textoOriginal) {
     return { tipo, sentimiento: analisisSentimiento, hashtagsLimpios };
 }
 
-// 5. ENDPOINT PARA PROCESAR EL CSV (Optimizado para Cargas Masivas)
+// 5. ENDPOINT PARA PROCESAR EL CSV (Inyección Masiva Blindada por Lotes)
 app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
     try {
         if (!req.files || req.files.length === 0) {
@@ -123,7 +124,7 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
         const bufferStream = new stream.PassThrough();
         bufferStream.end(archivoSubido.buffer);
 
-        // Envolvemos el flujo del Stream en una Promesa Nativa para controlar Express
+        // Envolvemos el flujo en una Promesa Nativa para controlar Express
         const totalRegistrosProcesados = await new Promise((resolve, reject) => {
             bufferStream
                 .pipe(csv())
@@ -136,20 +137,22 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                         const loteUsuarios = [];
                         const loteComentarios = [];
 
-                        // 1. Recorremos rápidamente el CSV en memoria para estructurar los arreglos
+                        // 1. Recorremos rápidamente el CSV estructurando los arreglos con los datos limpios
                         for (const fila of resultadosCsv) {
                             const numConsecutivo = fila['Num'];
                             const authorNameRaw = fila['Author Name'] || fila['author_name'];
                             const commentText = fila['Comments Text'] || fila['comments_text'] || "";
                             const videoTime = fila['Video Time'] || fila['video_time'] || null;
                             const messageTime = fila['Message Time'] || fila['message_time'];
-                            const authorChannelUrlRaw = fila['Author Channel URL'] || fila['author_channel_url'] || "";
 
                             if (!authorNameRaw) continue; 
 
+                            // Normalizamos el autor asegurando el prefijo '@'
                             const authorNameClean = authorNameRaw.trim();
                             const authorName = authorNameClean.startsWith('@') ? authorNameClean : `@${authorNameClean}`;
-                            const urlCanalCalculada = authorChannelUrlRaw || `https://www.youtube.com/${authorName}`;
+                            
+                            // CONCATENACIÓN CRÍTICA: Forzamos la estructura uniforme de la URL usando el usuario_llave
+                            const urlCanalCalculada = `https://www.youtube.com/${authorName}`;
 
                             const textoProcesadoEmojis = emoji.emojify(commentText);
                             const analitica = clasificarYSentimiento(textoProcesadoEmojis);
@@ -158,7 +161,7 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                             loteUsuarios.push({
                                 usuario_youtube_display: authorName,
                                 usuario_llave: authorName, 
-                                url_canal: urlCanalCalculada,
+                                url_canal: urlCanalCalculada, // URL formateada uniforme
                                 es_externo: true,
                                 pendiente_actualizacion: true
                             });
@@ -170,7 +173,7 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                                 comments_text: textoProcesadoEmojis,
                                 video_time: videoTime,
                                 message_time: messageTime ? new Date(messageTime) : new Date(),
-                                author_channel_url: urlCanalCalculada,
+                                author_channel_url: urlCanalCalculada, // URL formateada uniforme
                                 is_live_comment: esEnVivo,
                                 tipo_comentario: analitica.tipo,
                                 sentimiento: analitica.sentimiento,
@@ -196,7 +199,7 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                             }
                         }
 
-                        // PASO B: Insertar todos los comentarios masivos de golpe
+                        // PASO B: Insertar todos los comentarios masivos de golpe (Cumpliendo la FK de inmediato)
                         console.log(`🚀 Insertando ${loteComentarios.length} comentarios en la base de datos...`);
                         for (let i = 0; i < loteComentarios.length; i += TAMANO_LOTE) {
                             const segmento = loteComentarios.slice(i, i + TAMANO_LOTE);
@@ -209,7 +212,6 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                             }
                         }
 
-                        // Resolvemos la promesa regresando la cantidad total real procesada
                         resolve(resultadosCsv.length);
 
                     } catch (errBucle) {
@@ -222,7 +224,6 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
         console.log("✅ ¡Procesamiento e ingesta masiva por lotes completada con éxito!");
         res.setHeader('Content-Type', 'application/json');
         return res.status(200).send(JSON.stringify({ 
-            // Modificado para que siempre tome el total dinámico calculado
             mensaje: "Archivo procesado e ingresado exitosamente.", 
             total_registros: Number(totalRegistrosProcesados)
         }));
