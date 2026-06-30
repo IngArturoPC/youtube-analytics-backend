@@ -287,3 +287,20 @@ app.put('/api/users/update-groups', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// ENDPOINT PARA OBTENER SOLO LOS USUARIOS CON ALERTA PENDIENTE
+app.get('/api/users/pending', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('catalogo_usuarios_youtube')
+            .select('*')
+            .eq('pendiente_actualizacion', true)
+            .order('usuario_youtube_display', { ascending: true });
+
+        if (error) throw error;
+        res.json(data);
+    } catch (error) {
+        console.error("❌ Error al obtener usuarios pendientes:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
