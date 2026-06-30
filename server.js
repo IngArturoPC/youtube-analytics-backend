@@ -102,13 +102,13 @@ function clasificarYSentimiento(textoOriginal) {
     return { tipo, sentimiento: analisisSentimiento, hashtagsLimpios };
 }
 
-// 5. ENDPOINT PARA PROCESAR EL CSV
+// 5. ENDPOINT PARA PROCESAR EL CSV (Estructura Blindada con Promesa Nativa)
 app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
     try {
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({ error: "No se subió ningún archivo CSV." });
         }
-
+        
         const archivoSubido = req.files[0];
         const nombreArchivo = archivoSubido.originalname || ""; 
         const esEnVivo = req.body.is_live_comment === 'true';
@@ -131,115 +131,117 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
         const bufferStream = new stream.PassThrough();
         bufferStream.end(archivoSubido.buffer);
 
-        // Promesamos el procesamiento del stream para obligar a Express a esperar que termine todo
-        await new Promise((resolve, reject) => {
+        // 🌟 REGLA 1 y 2: Envolvemos el flujo del Stream en una Promesa para controlar a Express
+        const totalRegistrosProcesados = await new Promise((resolve, reject) => {
             bufferStream
                 .pipe(csv())
                 .on('data', (data) => resultadosCsv.push(data))
-                .on('end', resolve)
-                .on('error', reject);
+                .on('error', (errStream) => reject(errStream)) // Si falla el parseo, aborta inmediatamente
+                .on('end', async () => {
+                    try {
+                        console.log(`💬 Procesando lote de ${resultadosCsv.length} filas del CSV...`);
+
+                        for (const fila of resultadosCsv) {
+                            const numConsecutivo = fila['Num'];
+                            const authorNameRaw = fila['Author Name'] || fila['author_name'];
+                            const commentText = fila['Comments Text'] || fila['comments_text'] || "";
+                            const videoTime = fila['Video Time'] || fila['video_time'] || null;
+                            const messageTime = fila['Message Time'] || fila['message_time'];
+                            const authorChannelUrlRaw = fila['Author Channel URL'] || fila['author_channel_url'] || "";
+
+                            if (!authorNameRaw) continue; 
+
+                            // Tratamiento del prefijo '@'
+                            const authorNameClean = authorNameRaw.trim();
+                            const authorName = authorNameClean.startsWith('@') ? authorNameClean : `@${authorNameClean}`;
+                            const urlCanalCalculada = authorChannelUrlRaw || `https://www.youtube.com/${authorName}`;
+
+                            // Análisis semántico
+                            const textoProcesadoEmojis = emoji.emojify(commentText);
+                            const analitica = clasificarYSentimiento(textoProcesadoEmojis);
+
+                            // UPSERT del Catálogo de Usuarios
+                            const { error: errUpsertUser } = await supabase
+                                .from('catalogo_usuarios_youtube')
+                                .upsert(
+                                    {
+                                        usuario_youtube_display: authorName,
+                                        usuario_llave: authorName, 
+                                        url_canal: urlCanalCalculada,
+                                        es_externo: true,
+                                        pendiente_actualizacion: true
+                                    },
+                                    { onConflict: 'usuario_llave', ignoreDuplicates: true }
+                                );
+
+                            if (errUpsertUser) {
+                                console.warn(`⚠️ Error al asegurar el usuario ${authorName} (Num CSV: ${numConsecutivo}):`, errUpsertUser.message);
+                                continue;
+                            }
+
+                            // Inserción del Comentario
+                            const { data: comentarioInsertado, error: errComment } = await supabase
+                                .from('youtube_comments')
+                                .insert([{
+                                    file_sequence_number: Number(numConsecutivo) || 1,
+                                    author_name: authorName,
+                                    comments_text: textoProcesadoEmojis,
+                                    video_time: videoTime,
+                                    message_time: messageTime ? new Date(messageTime) : new Date(),
+                                    author_channel_url: urlCanalCalculada,
+                                    is_live_comment: esEnVivo,
+                                    tipo_comentario: analitica.tipo,
+                                    sentimiento: analitica.sentimiento,
+                                    uploaded_at: new Date(),            
+                                    fecha_txt: fechaTxt,                
+                                    anio_mes_txt: anioMesTxt            
+                                }])
+                                .select('internal_id') 
+                                .maybeSingle();
+                                                            
+                            if (errComment) {
+                                console.error(`❌ Error insertando comentario (Num CSV: ${numConsecutivo}):`, errComment.message);
+                                continue;
+                            }
+
+                            // Inserción de Hashtags relacionales
+                            if (comentarioInsertado && analitica.hashtagsLimpios.length > 0) {
+                                const insertsHashtags = analitica.hashtagsLimpios.map(tag => ({
+                                    comment_id: comentarioInsertado.internal_id, 
+                                    author_name: authorName,                       
+                                    hashtag: tag                                   
+                                }));
+                                
+                                const { error: errTags } = await supabase.from('comment_hashtags').insert(insertsHashtags);
+                                if (errTags) {
+                                    console.warn(`⚠️ Error insertando hashtag (Num CSV: ${numConsecutivo}):`, errTags.message);
+                                }
+                            }
+                        }
+
+                        // Al terminar el bucle exitosamente, resolvemos la Promesa devolviendo el total
+                        resolve(resultadosCsv.length);
+
+                    } catch (errBucle) {
+                        reject(errBucle);
+                    }
+                });
         });
 
-        console.log(`💬 Procesando lote de ${resultadosCsv.length} filas del CSV...`);
-
-        // Procesamiento secuencial y asíncrono seguro de las filas
-        for (const fila of resultadosCsv) {
-            // MAPEO DE COLUMNAS (Agregada tu columna 'Num' del CSV)
-            const numConsecutivo = fila['Num'];
-            const authorNameRaw = fila['Author Name'] || fila['author_name'];
-            const commentText = fila['Comments Text'] || fila['comments_text'] || "";
-            const videoTime = fila['Video Time'] || fila['video_time'] || null;
-            const messageTime = fila['Message Time'] || fila['message_time'];
-            const authorChannelUrlRaw = fila['Author Channel URL'] || fila['author_channel_url'] || "";
-
-            if (!authorNameRaw) continue; 
-
-            // Tratamiento del prefijo '@' en el autor
-            const authorNameClean = authorNameRaw.trim();
-            const authorName = authorNameClean.startsWith('@') ? authorNameClean : `@${authorNameClean}`;
-
-            // URL del canal estructurada con arroba
-            const urlCanalCalculada = authorChannelUrlRaw || `https://www.youtube.com/${authorName}`;
-
-            // Análisis analítico y de sentimiento
-            const textoProcesadoEmojis = emoji.emojify(commentText);
-            const analitica = clasificarYSentimiento(textoProcesadoEmojis);
-
-            // --- LÓGICA DE USUARIO EN EL CATÁLOGO (UPSERT BLINDADO) ---
-            const { error: errUpsertUser } = await supabase
-                .from('catalogo_usuarios_youtube')
-                .upsert(
-                    {
-                        usuario_youtube_display: authorName,
-                        usuario_llave: authorName, 
-                        url_canal: urlCanalCalculada,
-                        es_externo: true,
-                        pendiente_actualizacion: true
-                    },
-                    { onConflict: 'usuario_llave', ignoreDuplicates: true }
-                );
-
-            if (errUpsertUser) {
-                console.warn(`⚠️ Error al asegurar el usuario ${authorName} (Num CSV: ${numConsecutivo}):`, errUpsertUser.message);
-                continue;
-            }
-
-            // INSERCIÓN DEL COMENTARIO
-            const { data: comentarioInsertado, error: errComment } = await supabase
-                .from('youtube_comments')
-                .insert([{
-                    file_sequence_number: Number(numConsecutivo) || 1,
-                    author_name: authorName,
-                    comments_text: textoProcesadoEmojis,
-                    video_time: videoTime,
-                    message_time: messageTime ? new Date(messageTime) : new Date(),
-                    author_channel_url: urlCanalCalculada,
-                    is_live_comment: esEnVivo,
-                    tipo_comentario: analitica.tipo,
-                    sentimiento: analitica.sentimiento,
-                    uploaded_at: new Date(),   
-                    fecha_txt: fechaTxt,        
-                    anio_mes_txt: anioMesTxt      
-                }])
-                .select('internal_id') 
-                .maybeSingle();
-
-            if (errComment) {
-                console.error(`❌ Error insertando comentario (Num CSV: ${numConsecutivo}):`, errComment.message);
-                continue;
-            }
-
-            // INSERCIÓN DE HASHTAGS RELACIONALES
-            if (comentarioInsertado && analitica.hashtagsLimpios && analitica.hashtagsLimpios.length > 0) {
-                const insertsHashtags = analitica.hashtagsLimpios.map(tag => ({
-                    comment_id: comentarioInsertado.internal_id, 
-                    author_name: authorName,      
-                    hashtag: tag                         
-                }));
-
-                const { error: errTags } = await supabase.from('comment_hashtags').insert(insertsHashtags);
-
-                if (errTags) {
-                    console.warn(`⚠️ Error insertando hashtag (Num CSV: ${numConsecutivo}):`, errTags.message);
-                }
-            }
-        }
-
+        // 🌟 LA RESPUESTA QUEDA FUERA DEL STREAM: Sincronización perfecta con Express
         console.log("✅ ¡Procesamiento e ingesta de datos completada exitosamente!");
-
-        // Respuesta exitosa fuera del stream
         res.setHeader('Content-Type', 'application/json');
         return res.status(200).send(JSON.stringify({ 
             mensaje: "Archivo procesado e ingresado exitosamente.", 
-            total_registros: Number(resultadosCsv.length)
+            total_registros: Number(totalRegistrosProcesados)
         }));
 
     } catch (error) {
-        console.error("❌ ERROR CRÍTICO EN EL SERVIDOR:", error);
-        return res.status(500).json({ 
-            error: "Falla crítica en el servidor al procesar el archivo.", 
-            detalle: error.message 
-        });
+        console.error("❌ FALLA CRÍTICA EN EL ENDPOINT:", error);
+        // Al estar fuera del stream, este catch captura fallas de compilación o de Supabase limpiamente
+        if (!res.headersSent) {
+            return res.status(500).json({ error: "Falla crítica en el servidor.", detalle: error.message });
+        }
     }
 });
 
