@@ -216,11 +216,11 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                         contadorFila++;
                     }
 
-                    console.log("✅ ¡Procesamiento e ingesta de datos completada!");
+                    console.log("✅ ¡Procesamiento e ingesta completados exitosamente!");
                     return res.json({ 
                         mensaje: "Archivo procesado e ingresado exitosamente.", 
-                        total_registros: resultadosCsv.length
-                    });
+                        total_registros: Number(resultadosCsv.length)
+                    })
 
                 } catch (errInterno) {
                     console.error("❌ ERROR EN EL PROCESAMIENTO INTERNO:", errInterno);
