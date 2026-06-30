@@ -23,10 +23,22 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// 2. CONFIGURACIÓN DE SUPABASE
+
+// 2. CONFIGURACIÓN DE SUPABASE (Usando la clave Service Role desde las variables de entorno)
 const supabaseUrl = 'https://zhtclrjpowktkcnccmwx.supabase.co'; 
-const supabaseKey = 'sb_publishable_DowdOFlmdEUVv5FgeiT7EQ_fO170UiQ';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Intenta leer la clave secreta del entorno; si no existe, usa la que tenías por defecto
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'sb_publishable_DowdOFlmdEUVv5FgeiT7EQ_fO170UiQ';
+
+console.log("=== CONTROL DE CONEXIÓN DIRECTA ===");
+console.log("Instanciando cliente de Supabase...");
+
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false
+  }
+});
+
 
 // 3. DICCIONARIO DE SALUDOS EXTENDIDO
 const DICCIONARIO_SALUDOS = ['hola', 'buenos dias', 'saludos', 'buenas tardes', 'buenas noches', 'buen dia', 'saludo', 'gracias'];
