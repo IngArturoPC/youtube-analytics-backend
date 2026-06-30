@@ -40,7 +40,7 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 // 3. DICCIONARIO DE SALUDOS EXTENDIDO
 const DICCIONARIO_SALUDOS = ['hola', 'buenos dias', 'saludos', 'buenas tardes', 'buenas noches', 'buen dia', 'saludo', 'gracias'];
 
-// 4. FUNCIÓN INTEGRADORA: CLASIFICACIÓN DE TIPO Y SENTIMIENTO
+// 4. FUNCIÓN INTEGRADORA: CLASIFICACIÓN DE TIPO Y SENTIMIENTO (CORREGIDA)
 function clasificarYSentimiento(textoOriginal) {
     const textoLimpio = textoOriginal ? textoOriginal.trim() : "";
     if (textoLimpio === "") {
@@ -48,7 +48,6 @@ function clasificarYSentimiento(textoOriginal) {
     }
 
     const regexHashtags = /#\w+/g;
-    const hashtags = textoLoptio || [];
     const hashtagsMatch = textoLimpio.match(regexHashtags) || [];
     const hashtagsLimpios = [...new Set(hashtagsMatch)].map(tag => tag.replace('#', '').toLowerCase());
 
