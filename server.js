@@ -112,12 +112,17 @@ app.post('/api/upload', upload.any(), async (req, res) => {
         let anioTxt = "0000";
         let anioMesTxt = "0000-00";
 
-        // Busca una secuencia de 8 números en el nombre del archivo (ej: 20260521)
-        const matchFecha = nombreArchivo.match(/\d{8}/);
+
+        // Busca una secuencia de exactamente 8 dígitos que empiece con "20" (ej: 20260510)
+        // Esto soporta formatos como a01data20260510.csv, datta20260510.csv, etc.
+        const matchFecha = nombreArchivo.match(/20\d{6}/);
+
         if (matchFecha) {
             fechaTxt = matchFecha[0]; // "20260521"
             anioTxt = fechaTxt.substring(0, 4); // "2026"
             anioMesTxt = `${anioTxt}-${fechaTxt.substring(4, 6)}`; // "2026-05"
+        } else {
+        console.warn(`⚠️ No se detectó una fecha válida de 8 dígitos (que inicie con 20) en el archivo: ${nombreArchivo}. Se usarán valores por defecto.`);
         }
 
         console.log(`📂 Procesando archivo: ${nombreArchivo}`);
@@ -171,13 +176,13 @@ app.post('/api/upload', upload.any(), async (req, res) => {
                                 }]);
                         }
 
-                        // INSERCIÓN SIMPLIFICADA DEL COMENTARIO (Cumpliendo la nueva estructura)
+                        // INSERCIÓN SIMPLIFICADA DEL COMENTARIO (Cumpliendo la nueva estructura de tu BD)
                         const { data: comentarioInsertado, error: errComment } = await supabase
                             .from('youtube_comments')
                             .insert([{
-                                //internal_id: Number(contadorFila) || 1, // Enviar el consecutivo del bucle de forma segura
+                                file_sequence_number: Number(contadorFila), // Mantiene la posición original reiniciando en 1 por archivo
                                 author_name: authorName,
-                                comments_text: textoProcesadoEmojis,
+                                coments_text: textoProcesadoEmojis,
                                 message_time: messageTime ? new Date(messageTime) : new Date(),
                                 author_channel_url: urlCanalCalculada,
                                 is_live_comment: esEnVivo,
@@ -185,9 +190,11 @@ app.post('/api/upload', upload.any(), async (req, res) => {
                                 sentimiento: analitica.sentimiento,
                                 uploaded_at: new Date(),            // Fecha de carga calculada por el backend
                                 fecha_txt: fechaTxt,                // "20260521"
-                                anio_txt: anioTxt,                  // "2026"
+                                // ⚠️ Nota: 'anio_txt' fue removido. NO lo agregues aquí, Supabase lo calcula solo.
                                 anio_mes_txt: anioMesTxt            // "2026-05"
                             }])
+
+
                             .select('*') // Trae toda la fila generada por la BD (incluyendo su nuevo internal_id automático)
                             .maybeSingle();
                                                         
