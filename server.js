@@ -100,11 +100,10 @@ function clasificarYSentimiento(textoOriginal) {
 app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
     try {
         if (!req.files || req.files.length === 0) {
-            return res.status(400).json({ error: "No se subió ningún archivo CSV." });
+            return res.status(400).json({ error: "No se recibió ningún archivo CSV." });
         }
-        
-        const archivoSubido = req.files[0];
-        const nombreArchivo = archivoSubido.originalname || ""; // Ej: data20260521.csv
+
+        const nombreArchivo = req.files[0].originalname || "";
         const esEnVivo = req.body.is_live_comment === 'true';
 
         // --- EXTRACCIÓN DINÁMICA DE FECHAS DESDE EL NOMBRE DEL ARCHIVO ---
@@ -112,52 +111,81 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
         let anioTxt = "0000";
         let anioMesTxt = "0000-00";
 
-
-        // Busca una secuencia de exactamente 8 dígitos que empiece con "20" (ej: 20260510)
-        // Esto soporta formatos como a01data20260510.csv, datta20260510.csv, etc.
         const matchFecha = nombreArchivo.match(/20\d{6}/);
-
         if (matchFecha) {
-            fechaTxt = matchFecha[0]; // "20260521"
-            anioTxt = fechaTxt.substring(0, 4); // "2026"
-            anioMesTxt = `${anioTxt}-${fechaTxt.substring(4, 6)}`; // "2026-05"
-        } else {
-        console.warn(`⚠️ No se detectó una fecha válida de 8 dígitos (que inicie con 20) en el archivo: ${nombreArchivo}. Se usarán valores por defecto.`);
+            fechaTxt = matchFecha[0];                             
+            anioTxt = fechaTxt.substring(0, 4);                   
+            anioMesTxt = `${anioTxt}-${fechaTxt.substring(4, 6)}`; 
         }
 
-        console.log(`📂 Procesando archivo: ${nombreArchivo}`);
-        console.log(`📆 Dimensiones detectadas -> Fecha: ${fechaTxt}, Año: ${anioTxt}, Período: ${anioMesTxt}`);
+        console.log(`📂 Procesando archivo: ${nombreArchivo} | En Vivo: ${esEnVivo}`);
 
-        // PARSEO DEL ARCHIVO CSV
         const resultadosCsv = [];
         const bufferStream = new stream.PassThrough();
-        bufferStream.end(archivoSubido.buffer);
+        bufferStream.end(req.files[0].buffer);
 
         bufferStream
             .pipe(csv())
             .on('data', (data) => resultadosCsv.push(data))
             .on('end', async () => {
                 try {
-                    console.log(`💬 CSV cargado. Procesando ${resultadosCsv.length} registros...`);
-                    
-                    // Inicializar contador consecutivo en 1 para este archivo específico
+                    console.log(`📊 Total de filas leídas del CSV: ${resultadosCsv.length}`);
                     let contadorFila = 1;
 
                     for (const fila of resultadosCsv) {
-                        const authorName = fila['Author Name'] || fila['author_name'];
-                        const commentText = fila['Comments Text'] || fila['comments_text'];
-                        const messageTime = fila['Message Time'] || fila['message_time'];
+                        const authorNameRaw = fila['Author Name'] ? fila['Author Name'].trim() : "";
+                        const commentText = fila['Comments Text'] || ""; 
+                        const videoTime = fila['Video Time'] || null;
+                        const messageTime = fila['Message Time'] || null;
+                        const authorChannelUrlRaw = fila['Author Channel URL'] || "";
 
-                        if (!authorName) continue; // Saltar filas vacías
+                        if (!authorNameRaw) {
+                            console.warn(`⚠️ Fila ${contadorFila} omitida: Columna 'Author Name' vacía.`);
+                            contadorFila++;
+                            continue;
+                        }
 
-                        // Procesamiento semántico
-                        const textoProcesadoEmojis = emoji.emojify(commentText || "");
-                        const analitica = clasificarYSentimiento(textoProcesadoEmojis);
+                        // Asegurar formato del autor con '@' si no lo trae
+                        const authorName = authorNameRaw.startsWith('@') ? authorNameRaw : `@${authorNameRaw}`;
 
-                        // Cálculo dinámico de URL del Canal
-                        const urlCanalCalculada = `https://www.youtube.com/${encodeURIComponent(authorName.trim())}`;
+                        // Resolver URL del canal respetando el '@'
+                        const urlCanalCalculada = authorChannelUrlRaw || `https://www.youtube.com/${authorName}`;
 
-                        // LÓGICA UPSERT DE USUARIO EXTERNO
+                        // Convertir emojis a texto/formato unicode nativo
+                        const textoProcesadoEmojis = emoji.emojify(commentText);
+
+                        // --- DETECCIÓN DINÁMICA DE HASHTAGS ---
+                        const regexHashtags = /#\w+/g;
+                        const hashtagsEncontrados = textoProcesadoEmojis.match(regexHashtags) || [];
+                        // Limpiar duplicados y quitarles el símbolo '#' para guardar el texto limpio si se prefiere
+                        const hashtagsLimpios = [...new Set(hashtagsEncontrados)].map(tag => tag.replace('#', ''));
+
+                        // --- EVALUACIÓN DE SENTIMIENTO (Sentiment-Spanish) ---
+                        const analisisSentimiento = sentiment.analyze(textoProcesadoEmojis);
+                        let clasificacionSentimiento = 'Neutral';
+                        if (analisisSentimiento.score > 0) clasificacionSentimiento = 'Positivo';
+                        if (analisisSentimiento.score < 0) clasificacionSentimiento = 'Negativo';
+
+                        // --- EVALUACIÓN DE TIPO DE COMENTARIO ---
+                        let tipoComentarioCalculado = 'Solo Comentarios';
+                        
+                        const textoLimpioDeHashtags = textoProcesadoEmojis.replace(regexHashtags, '').trim();
+                        const contieneSoloEmojis = textoProcesadoEmojis.length > 0 && emoji.strip(textoProcesadoEmojis).trim() === "";
+                        const regexSaludos = /\b(hola|saludos|buenos dias|buenas tardes|buenas noches|buen dia|saludo|gracias)\b/i;
+
+                        if (textoProcesadoEmojis.length > 0 && hashtagsEncontrados.length > 0 && textoLimpioDeHashtags === "") {
+                            tipoComentarioCalculado = 'Solo HashTag';
+                        } else if (contieneSoloEmojis) {
+                            tipoComentarioCalculado = 'Solo Emoticons';
+                        } else if (regexSaludos.test(textoProcesadoEmojis) && hashtagsEncontrados.length === 0 && !contieneSoloEmojis && textoProcesadoEmojis.length < 30) {
+                            tipoComentarioCalculado = 'Solo Saludos';
+                        } else if (hashtagsEncontrados.length > 0) {
+                            tipoComentarioCalculado = 'Comentarios con HashTag';
+                        } else {
+                            tipoComentarioCalculado = 'Solo Comentarios';
+                        }
+
+                        // --- LÓGICA UPSERT DE USUARIO EN EL CATÁLOGO ---
                         const { data: usuarioExistente } = await supabase
                             .from('catalogo_usuarios_youtube')
                             .select('usuario_llave')
@@ -176,44 +204,52 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                                 }]);
                         }
 
-                        // INSERCIÓN SIMPLIFICADA DEL COMENTARIO (Cumpliendo la nueva estructura de tu BD)
+                        // --- INSERCIÓN EN LA TABLA youtube_comments ---
                         const { data: comentarioInsertado, error: errComment } = await supabase
                             .from('youtube_comments')
                             .insert([{
-                                file_sequence_number: Number(contadorFila), // Mantiene la posición original reiniciando en 1 por archivo
+                                file_sequence_number: Number(contadorFila),
                                 author_name: authorName,
-                                coments_text: textoProcesadoEmojis,
+                                comments_text: textoProcesadoEmojis,
+                                video_time: videoTime,
                                 message_time: messageTime ? new Date(messageTime) : new Date(),
                                 author_channel_url: urlCanalCalculada,
                                 is_live_comment: esEnVivo,
-                                tipo_comentario: analitica.tipo,
-                                sentimiento: analitica.sentimiento,
-                                uploaded_at: new Date(),            // Fecha de carga calculada por el backend
-                                fecha_txt: fechaTxt,                // "20260521"
-                                // ⚠️ Nota: 'anio_txt' fue removido. NO lo agregues aquí, Supabase lo calcula solo.
-                                anio_mes_txt: anioMesTxt            // "2026-05"
+                                tipo_comentario: tipoComentarioCalculado,
+                                sentimiento: clasificacionSentimiento,
+                                uploaded_at: new Date(),            
+                                fecha_txt: fechaTxt,                
+                                anio_mes_txt: anioMesTxt            
                             }])
-                            .select('*') // Trae toda la fila generada por la BD (incluyendo su nuevo internal_id automático)
+                            .select('internal_id') // Recuperamos el ID autogenerado
                             .maybeSingle();
-                                                        
+
                         if (errComment) {
-                            console.error(`❌ Error en fila ${contadorFila} (Autor: ${authorName}):`, errComment.message);
+                            console.error(`❌ Error insertando fila ${contadorFila} (Autor: ${authorName}):`, errComment.message);
+                            throw new Error(errComment.message);
                         }
 
-                        // INSERCIÓN DE HASHTAGS (Si existen)
-                        if (comentarioInsertado && analitica.hashtagsLimpios.length > 0) {
-                            const insertsHashtags = analitica.hashtagsLimpios.map(tag => ({
-                                comment_id: comentarioInsertado.internal_id,
-                                hashtag: tag
+                        // --- INSERCIÓN DE HASHTAGS EN LA TABLA RELACIONAL ---
+                        if (comentarioInsertado && hashtagsLimpios.length > 0) {
+                            const insertsHashtags = hashtagsLimpios.map(tag => ({
+                                comment_id: comentarioInsertado.internal_id, // Relación exacta con el ID numérico de Supabase
+                                author_name: authorName,                       // Guardamos quién lo realizó
+                                hashtag: tag.toLowerCase()                     // Guardamos el hashtag en minúsculas para análisis estandarizado
                             }));
-                            await supabase.from('comment_hashtags').insert(insertsHashtags);
+
+                            const { error: errTags } = await supabase
+                                .from('comment_hashtags')
+                                .insert(insertsHashtags);
+
+                            if (errTags) {
+                                console.warn(`⚠️ Advertencia al guardar hashtags de la fila ${contadorFila}:`, errTags.message);
+                            }
                         }
 
-                        // Incrementar el consecutivo para la siguiente fila del archivo
                         contadorFila++;
                     }
 
-                    console.log("✅ ¡Procesamiento e ingesta completados exitosamente!");
+                    console.log("✅ ¡Procesamiento e ingesta completados exitosamente con clasificación y hashtags!");
                     return res.json({ 
                         mensaje: "Archivo procesado e ingresado exitosamente.", 
                         total_registros: resultadosCsv.length
