@@ -102,6 +102,7 @@ function clasificarYSentimiento(textoOriginal) {
     return { tipo, sentimiento: analisisSentimiento, hashtagsLimpios };
 }
 
+
 // 5. ENDPOINT PARA PROCESAR EL CSV (Estructura Blindada con Promesa Nativa)
 app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
     try {
@@ -131,12 +132,12 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
         const bufferStream = new stream.PassThrough();
         bufferStream.end(archivoSubido.buffer);
 
-        // 🌟 REGLA 1 y 2: Envolvemos el flujo del Stream en una Promesa para controlar a Express
+        // Envolvemos el flujo en una Promesa Nativa para controlar la asincronía frente a Express
         const totalRegistrosProcesados = await new Promise((resolve, reject) => {
             bufferStream
                 .pipe(csv())
                 .on('data', (data) => resultadosCsv.push(data))
-                .on('error', (errStream) => reject(errStream)) // Si falla el parseo, aborta inmediatamente
+                .on('error', (errStream) => reject(errStream)) 
                 .on('end', async () => {
                     try {
                         console.log(`💬 Procesando lote de ${resultadosCsv.length} filas del CSV...`);
@@ -156,7 +157,7 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                             const authorName = authorNameClean.startsWith('@') ? authorNameClean : `@${authorNameClean}`;
                             const urlCanalCalculada = authorChannelUrlRaw || `https://www.youtube.com/${authorName}`;
 
-                            // Análisis semántico
+                            // Análisis semántico (con la corrección de emoji nativa)
                             const textoProcesadoEmojis = emoji.emojify(commentText);
                             const analitica = clasificarYSentimiento(textoProcesadoEmojis);
 
@@ -179,7 +180,7 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                                 continue;
                             }
 
-                            // Inserción del Comentario
+                            // Inserción del Comentario utilizando la columna 'Num'
                             const { data: comentarioInsertado, error: errComment } = await supabase
                                 .from('youtube_comments')
                                 .insert([{
@@ -219,7 +220,7 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                             }
                         }
 
-                        // Al terminar el bucle exitosamente, resolvemos la Promesa devolviendo el total
+                        // Resolvemos la promesa entregando el total de filas leídas
                         resolve(resultadosCsv.length);
 
                     } catch (errBucle) {
@@ -228,7 +229,7 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
                 });
         });
 
-        // 🌟 LA RESPUESTA QUEDA FUERA DEL STREAM: Sincronización perfecta con Express
+        // --- LA RESPUESTA QUEDA PERFECTAMENTE FUERA DEL STREAM ---
         console.log("✅ ¡Procesamiento e ingesta de datos completada exitosamente!");
         res.setHeader('Content-Type', 'application/json');
         return res.status(200).send(JSON.stringify({ 
@@ -238,12 +239,12 @@ app.post('/api/comments/upload-csv', upload.any(), async (req, res) => {
 
     } catch (error) {
         console.error("❌ FALLA CRÍTICA EN EL ENDPOINT:", error);
-        // Al estar fuera del stream, este catch captura fallas de compilación o de Supabase limpiamente
         if (!res.headersSent) {
             return res.status(500).json({ error: "Falla crítica en el servidor.", detalle: error.message });
         }
     }
 });
+
 
 // 6. ENDPOINT PARA DASHBOARD
 app.get('/api/dashboard/metrics', async (req, res) => {
