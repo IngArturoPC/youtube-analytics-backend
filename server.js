@@ -304,3 +304,20 @@ app.get('/api/users/pending', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+
+// ENDPOINT PARA OBTENER EL CATÁLOGO BASE DE GRUPOS DISPONIBLES
+app.get('/api/groups/catalog', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('catalogo_grupos')
+            .select('nombre') // Extrae la columna donde guardas el nombre del grupo
+            .order('nombre', { ascending: true });
+
+        if (error) throw error;
+        res.json(data);
+    } catch (error) {
+        console.error("❌ Error al traer catálogo de grupos:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
