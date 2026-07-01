@@ -311,8 +311,8 @@ app.get('/api/groups/catalog', async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('catalogo_grupos')
-            .select('nombre') // Extrae la columna donde guardas el nombre del grupo
-            .order('nombre', { ascending: true });
+            .select('grupo', 'descripcion') // Extrae la columna donde guardas el nombre del grupo
+            .order('grupo', { ascending: true });
 
         if (error) throw error;
         res.json(data);
