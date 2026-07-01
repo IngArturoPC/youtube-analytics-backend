@@ -256,34 +256,41 @@ app.listen(PORT, () => {
 });
 
 
-// ENDPOINT PARA ACTUALIZAR GRUPOS DE UN USUARIO DESDE EL FORMULARIO WEB
+// ENDPOINT ACTUALIZADO CON LAS COLUMNAS REALES DE TU LAYOUT
 app.put('/api/users/update-groups', async (req, res) => {
     try {
-        const { usuario_llave, grupos, es_externo } = req.body;
+        const { usuario_llave, grupo_principal, asignaciones } = req.body;
 
         if (!usuario_llave) {
-            return res.status(400).json({ error: "El usuario_llave es requerido." });
+            return res.status(400).json({ error: "El campo usuario_llave es obligatorio." });
         }
 
-        // Aquí mapeamos los grupos que envíe el formulario. 
-        // Puedes guardarlos como columnas separadas o adaptar según tus columnas de Supabase.
+        console.log(`ℹ️ Actualizando ${usuario_llave}. Grupo: ${grupo_principal}, Asignaciones:`, asignaciones);
+
+        // Mapeo exacto con los nombres reales de tus campos de Supabase
+        const updateData = {
+            grupo: grupo_principal || null,                // El valor del Radio Button
+            asignacion_01: asignaciones[0] || null,        // Primera Asignación
+            asignacion_02: asignaciones[1] || null,        // Segunda Asignación
+            asignacion_03: asignaciones[2] || null,        // ¡Nueva Tercera Asignación agregada!
+            pendiente_actualizacion: false                 // Se desmarca la alerta para activarlo
+        };
+
         const { data, error } = await supabase
             .from('catalogo_usuarios_youtube')
-            .update({
-                grupo_1: grupos[0] || null,
-                grupo_2: grupos[1] || null,
-                grupo_3: grupos[2] || null,
-                es_externo: es_externo !== undefined ? es_externo : true,
-                pendiente_actualizacion: false // ¡Aquí lo "activamos" y quitamos la alerta!
-            })
+            .update(updateData)
             .eq('usuario_llave', usuario_llave)
             .select();
 
-        if (error) throw error;
+        if (error) {
+            console.error("❌ Error devuelto por Supabase:", error.message);
+            throw error;
+        }
 
-        res.json({ mensaje: "Usuario actualizado y activado con éxito", usuario: data });
+        res.json({ mensaje: "Usuario actualizado correctamente", usuario: data });
+
     } catch (error) {
-        console.error("❌ Error al actualizar usuario:", error);
+        console.error("❌ Fallo en PUT /api/users/update-groups:", error.message);
         res.status(500).json({ error: error.message });
     }
 });
